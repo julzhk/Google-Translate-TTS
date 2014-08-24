@@ -7,13 +7,19 @@ import urllib, urllib2
 import time
 from collections import namedtuple
 
+WAIT_BETWEEN_REQUESTS = .5  # seconds
+audio_args = namedtuple('audio_args', ['language', 'output'])
+DEFAULT_MAX_SENTENCE_LENGTH = 100
 
-def split_text(input_text, max_length=100):
+def split_text(input_text, max_length=DEFAULT_MAX_SENTENCE_LENGTH):
     """
     Try to split between sentences to avoid interruptions mid-sentence.
     Failing that, split between words.
     See split_text_rec
+    :param input_text: String to convert to Mp3
+    :param max_length: Integer: Maximum unbroken string length accepted by the API
     """
+
     def split_text_rec(input_text, regexps, max_length=max_length):
         """
         Split a string into substrings which are at most max_length.
@@ -37,7 +43,7 @@ def split_text(input_text, max_length=100):
         Returns:
             a list of strings of maximum max_length length.
         """
-        if(len(input_text) <= max_length): return [input_text]
+        if (len(input_text) <= max_length): return [input_text]
 
         #mistakenly passed a string instead of a list
         if isinstance(regexps, basestring): regexps = [regexps]
@@ -50,7 +56,7 @@ def split_text(input_text, max_length=100):
         for val in text_list:
             current = combined_text.pop()
             concat = current + val
-            if(len(concat) <= max_length):
+            if (len(concat) <= max_length):
                 combined_text.append(concat)
             else:
                 combined_text.append(current)
@@ -62,25 +68,28 @@ def split_text(input_text, max_length=100):
                           ['([\,|\.|;]+)', '( )'])
 
 
-audio_args = namedtuple('audio_args',['language','output'])
-
-def audio_extract(input_text='',args=None):
+def audio_extract(input_text='', args=None):
     # This accepts :
     #   a dict,
     #   an audio_args named tuple
     #   or arg parse object
     if args is None:
-        args = audio_args(language='en',output=open('output.mp3', 'w'))
+        args = audio_args(language='en', output=open('output.mp3', 'w'))
     if type(args) is dict:
         args = audio_args(
-                    language=args.get('language','en'),
-                    output=open(args.get('output','output.mp3'), 'w')
+            language=args.get('language', 'en'),
+            output=open(args.get('output', 'output.mp3'), 'w')
         )
     #process input_text into chunks
     #Google TTS only accepts up to (and including) 100 characters long texts.
     #Split the text in segments of maximum 100 characters long.
     combined_text = split_text(input_text)
-
+    headers = {"Host": "translate.google.com",
+               "Referer": "http://www.gstatic.com/translate/sound_player2.swf",
+               "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) "
+                             "AppleWebKit/535.19 (KHTML, like Gecko) "
+                             "Chrome/18.0.1025.163 Safari/535.19"
+    }
     #download chunks and write them to the output file
     for idx, val in enumerate(combined_text):
         mp3url = "http://translate.google.com/translate_tts?tl=%s&q=%s&total=%s&idx=%s" % (
@@ -88,12 +97,6 @@ def audio_extract(input_text='',args=None):
             urllib.quote(val),
             len(combined_text),
             idx)
-        headers = {"Host": "translate.google.com",
-                   "Referer": "http://www.gstatic.com/translate/sound_player2.swf",
-                   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) "
-                                 "AppleWebKit/535.19 (KHTML, like Gecko) "
-                                 "Chrome/18.0.1025.163 Safari/535.19"
-        }
         req = urllib2.Request(mp3url, '', headers)
         sys.stdout.write('.')
         sys.stdout.flush()
@@ -101,7 +104,7 @@ def audio_extract(input_text='',args=None):
             try:
                 response = urllib2.urlopen(req)
                 args.output.write(response.read())
-                time.sleep(.5)
+                time.sleep(WAIT_BETWEEN_REQUESTS)
             except urllib2.URLError as e:
                 print ('%s' % e)
     args.output.close()
@@ -132,7 +135,7 @@ def text_to_speech_mp3_argparse():
         parser.print_help()
         sys.exit(1)
     return parser.parse_args()
-    
+
 
 if __name__ == "__main__":
     args = text_to_speech_mp3_argparse()
