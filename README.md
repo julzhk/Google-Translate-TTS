@@ -50,7 +50,9 @@ GoogleTTS.py -l ja -o konnichiwa_bitches.mp3 -s こんにちは
 or we can call
 
 audio_extract(input_text='tunnel snakes rule apparently', args = {'language':'en','output':'outputto.mp3'})
-
+Note: args are optional, and will default to:
+- Language: English
+- Filename: output.mp3
 
 Remember
 ===================
