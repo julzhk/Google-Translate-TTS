@@ -7,11 +7,20 @@ import urllib, urllib2
 import time
 from collections import namedtuple
 
+API_MAX_SENTENCE_LENGTH = 100 # The text-to-speech API only accepts this many words at a time.
+API_URL = "http://translate.google.com/translate_tts?tl=%s&q=%s&total=%s&idx=%s"
+DEFAULT_OUTPUT_FILENAME = 'output.mp3'
+REQUEST_HEADERS = {"Host": "translate.google.com",
+                   "Referer": "http://www.gstatic.com/translate/sound_player2.swf",
+                   "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) "
+                   "AppleWebKit/535.19 (KHTML, like Gecko) "
+                   "Chrome/18.0.1025.163 Safari/535.19"
+                  }
 WAIT_BETWEEN_REQUESTS = .5  # seconds
-audio_args = namedtuple('audio_args', ['language', 'output'])
-DEFAULT_MAX_SENTENCE_LENGTH = 100
 
-def split_text(input_text, max_length=DEFAULT_MAX_SENTENCE_LENGTH):
+audio_args = namedtuple('audio_args', ['language', 'output'])
+
+def split_text(input_text, max_length=API_MAX_SENTENCE_LENGTH):
     """
     Try to split between sentences to avoid interruptions mid-sentence.
     Failing that, split between words.
@@ -23,7 +32,7 @@ def split_text(input_text, max_length=DEFAULT_MAX_SENTENCE_LENGTH):
     def split_text_rec(input_text, regexps, max_length=max_length):
         """
         Split a string into substrings which are at most max_length.
-        Tries to make each substring as big as possible without exceeding
+        Tries to make each substring as long as possible without exceeding
         max_length.
         Will use the first regexp in regexps to split the input into
         substrings.
@@ -43,12 +52,12 @@ def split_text(input_text, max_length=DEFAULT_MAX_SENTENCE_LENGTH):
         Returns:
             a list of strings of maximum max_length length.
         """
-        if (len(input_text) <= max_length): return [input_text]
-
+        if (len(input_text) <= max_length):
+            return [input_text]
         #mistakenly passed a string instead of a list
-        if isinstance(regexps, basestring): regexps = [regexps]
+        if isinstance(regexps, basestring):
+            regexps = [regexps]
         regexp = regexps.pop(0) if regexps else '(.{%d})' % max_length
-
         text_list = re.split(regexp, input_text)
         combined_text = []
         #first segment could be >max_length
@@ -63,7 +72,6 @@ def split_text(input_text, max_length=DEFAULT_MAX_SENTENCE_LENGTH):
                 #val could be >max_length
                 combined_text.extend(split_text_rec(val, regexps, max_length))
         return combined_text
-
     return split_text_rec(input_text.replace('\n', ''),
                           ['([\,|\.|;]+)', '( )'])
 
@@ -74,41 +82,35 @@ def audio_extract(input_text='', args=None):
     #   an audio_args named tuple
     #   or arg parse object
     if args is None:
-        args = audio_args(language='en', output=open('output.mp3', 'w'))
+        args = audio_args(language='en', output=DEFAULT_OUTPUT_FILENAME)
     if type(args) is dict:
         args = audio_args(
             language=args.get('language', 'en'),
-            output=open(args.get('output', 'output.mp3'), 'w')
+            output=args.get('output', DEFAULT_OUTPUT_FILENAME)
         )
     #process input_text into chunks
     #Google TTS only accepts up to (and including) 100 characters long texts.
     #Split the text in segments of maximum 100 characters long.
     combined_text = split_text(input_text)
-    headers = {"Host": "translate.google.com",
-               "Referer": "http://www.gstatic.com/translate/sound_player2.swf",
-               "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_7_3) "
-                             "AppleWebKit/535.19 (KHTML, like Gecko) "
-                             "Chrome/18.0.1025.163 Safari/535.19"
-    }
     #download chunks and write them to the output file
-    for idx, val in enumerate(combined_text):
-        mp3url = "http://translate.google.com/translate_tts?tl=%s&q=%s&total=%s&idx=%s" % (
-            args.language,
-            urllib.quote(val),
-            len(combined_text),
-            idx)
-        req = urllib2.Request(mp3url, '', headers)
-        sys.stdout.write('.')
-        sys.stdout.flush()
-        if len(val) > 0:
-            try:
-                response = urllib2.urlopen(req)
-                args.output.write(response.read())
-                time.sleep(WAIT_BETWEEN_REQUESTS)
-            except urllib2.URLError as e:
-                print ('%s' % e)
-    args.output.close()
-    print('Saved MP3 to %s' % args.output.name)
+    with open(args.output, 'w') as write_file:
+        for idx, val in enumerate(combined_text):
+            mp3url = API_URL % (
+                args.language,
+                urllib.quote(val),
+                len(combined_text),
+                idx)
+            req = urllib2.Request(mp3url, '', REQUEST_HEADERS)
+            sys.stdout.write('.')
+            sys.stdout.flush()
+            if len(val) > 0:
+                try:
+                    response = urllib2.urlopen(req)
+                    write_file.write(response.read())
+                    time.sleep(WAIT_BETWEEN_REQUESTS)
+                except urllib2.URLError as e:
+                    print ('%s' % e)
+    print('MP3 saved to %s' % args.output)
 
 
 def text_to_speech_mp3_argparse():
@@ -118,19 +120,19 @@ def text_to_speech_mp3_argparse():
     parser.add_argument('-o', '--output',
                         action='store', nargs='?',
                         help='Filename to output audio to',
-                        type=argparse.FileType('wb'), default='out.mp3')
+                        default=DEFAULT_OUTPUT_FILENAME)
     parser.add_argument('-l', '--language',
                         action='store',
                         nargs='?',
-                        help='Language to output text to.', default='en')
+                        help='Language to output text in.', default='en')
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument('-f', '--file',
                        type=argparse.FileType('r'),
-                       help='File to read text from.')
+                       help='File to read from.')
     group.add_argument('-s', '--string',
                        action='store',
                        nargs='+',
-                       help='A string of text to convert to speech.')
+                       help='A text string to convert to a speech file.')
     if len(sys.argv) == 1:
         parser.print_help()
         sys.exit(1)
