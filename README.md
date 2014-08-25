@@ -7,7 +7,9 @@ For more background, check out this [blog post](http://www.hung-truong.com/blog/
 
 Usage
 =====
- Either 1/ on the command line, or 2/ as a function
+ Either
+ - 1/ on the command line, or
+ - 2/ as a function
 
 1/ Command line
 ---
@@ -28,7 +30,6 @@ optional arguments:
   -s STRING [STRING ...], --string STRING [STRING ...]
                         A string of text to convert to speech.
 ```
-
 
 Examples
 ---
